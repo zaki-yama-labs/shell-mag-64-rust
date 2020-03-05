@@ -1,6 +1,6 @@
 use clap::{App, Arg};
 use std::error::Error;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 type LocId = u16;
 #[derive(Debug, Deserialize)]
@@ -17,25 +17,42 @@ struct Trip {
     dropoff_loc: LocId,
 }
 
+// serde_jsonでJSON文字列を生成するためにSerializeを自動導出する
+#[derive(Debug, Serialize)]
+struct RecordCounts {
+    read: u32,
+    matched: u32,
+    skipped: u32,
+}
+
+impl Default for RecordCounts {
+    fn default() -> Self {
+        Self {
+            read: 0,
+            matched: 0,
+            skipped: 0,
+        }
+    }
+}
+
 // CSVファイルのパスを引数に取り、データを分析する
 fn analyze(infile: &str) -> Result<String, Box<dyn Error>> {
     // CSVリーダーを作る。失敗したときは「?」後置演算子の働きにより、
     // analyze() 関数からすぐにリターンし、処理の失敗を表すResult::Errを返す
     let mut reader = csv::Reader::from_path(infile)?;
 
-    let mut rec_counts = 0;
+    let mut rec_counts = RecordCounts::default();
     for result in reader.deserialize() {
         // どの型にデシリアライズするかをdeserialize()メソッドに
         // 教えるために、trip 変数に型アノテーションをつける
         let trip: Trip = result?;
-        rec_counts += 1;
+        rec_counts.read += 1;
         // 最初の10行だけ表示する
-        if rec_counts <= 10 {
+        if rec_counts.read <= 10 {
             println!("{:?}", trip);
         }
     }
-    // 読み込んだレコード数を表示する
-    println!("Total {} records read.", rec_counts);
+    println!("{:?}", rec_counts);
     Ok(String::default())
 }
 
