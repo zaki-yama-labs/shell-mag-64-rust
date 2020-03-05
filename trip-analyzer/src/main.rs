@@ -1,6 +1,17 @@
 use clap::{App, Arg};
 use std::error::Error;
 use serde::{Deserialize, Serialize};
+use chrono::prelude::*;
+
+// NaiveDateTimeは長いのでDTという別名を定義
+// chrono::NaiveDateTimeはタイムゾーンなしの日時型
+type DT = NaiveDateTime;
+// ついでにResult型の別名を定義する
+type AppResult<T> = Result<T, Box<dyn Error>>;
+
+fn parse_datetime(s: &str) -> AppResult<DT> {
+    DT::parse_from_str(s, "%Y-%m-%d %H:%M:%S").map_err(|e| e.into())
+}
 
 type LocId = u16;
 #[derive(Debug, Deserialize)]
