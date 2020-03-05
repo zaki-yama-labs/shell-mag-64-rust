@@ -1,5 +1,21 @@
 use clap::{App, Arg};
 use std::error::Error;
+use serde::Deserialize;
+
+type LocId = u16;
+#[derive(Debug, Deserialize)]
+struct Trip {
+    // rename アトリビュートでフィールド名と
+    // CSV のカラム名を結びつける
+    #[serde(rename = "tpep_pickup_datetime")]
+    pickup_datetime: String,
+    #[serde(rename = "tpep_dropoff_datetime")]
+    dropoff_datetime: String,
+    #[serde(rename = "PULocationID")]
+    pickup_loc: LocId,
+    #[serde(rename = "DOLocationID")]
+    dropoff_loc: LocId,
+}
 
 // CSVファイルのパスを引数に取り、データを分析する
 fn analyze(infile: &str) -> Result<String, Box<dyn Error>> {
@@ -8,11 +24,10 @@ fn analyze(infile: &str) -> Result<String, Box<dyn Error>> {
     let mut reader = csv::Reader::from_path(infile)?;
 
     let mut rec_counts = 0;
-    // records() メソッドで CSV のレコードを一つずつ取り出す
-    for result in reader.records() {
-        // result は Result<StringRecord, Error>型なので?演算子で
-        // StringRecord を取り出す
-        let trip = result?;
+    for result in reader.deserialize() {
+        // どの型にデシリアライズするかをdeserialize()メソッドに
+        // 教えるために、trip 変数に型アノテーションをつける
+        let trip: Trip = result?;
         rec_counts += 1;
         // 最初の10行だけ表示する
         if rec_counts <= 10 {
