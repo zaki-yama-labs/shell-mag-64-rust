@@ -6,7 +6,21 @@ fn analyze(infile: &str) -> Result<String, Box<dyn Error>> {
     // CSVリーダーを作る。失敗したときは「?」後置演算子の働きにより、
     // analyze() 関数からすぐにリターンし、処理の失敗を表すResult::Errを返す
     let mut reader = csv::Reader::from_path(infile)?;
-    // 処理に成功したので、（とりあえず空の文字列を包んだ）Result::Okを返す
+
+    let mut rec_counts = 0;
+    // records() メソッドで CSV のレコードを一つずつ取り出す
+    for result in reader.records() {
+        // result は Result<StringRecord, Error>型なので?演算子で
+        // StringRecord を取り出す
+        let trip = result?;
+        rec_counts += 1;
+        // 最初の10行だけ表示する
+        if rec_counts <= 10 {
+            println!("{:?}", trip);
+        }
+    }
+    // 読み込んだレコード数を表示する
+    println!("Total {} records read.", rec_counts);
     Ok(String::default())
 }
 
