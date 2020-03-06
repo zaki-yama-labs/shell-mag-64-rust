@@ -79,7 +79,9 @@ fn analyze(infile: &str) -> AppResult<String> {
         }
     }
     println!("{:?}", rec_counts);
-    Ok(String::default())
+    let display_stats = DisplayStats::new(rec_counts, hist);
+    let json = serde_json::to_string_pretty(&display_stats)?;
+    Ok(json)
 }
 
 fn main() {
@@ -164,6 +166,40 @@ impl DurationHistograms {
                     format!("duration secs {} is too long. {:?}", duration, e)
                         .into()
                 })
+        }
+    }
+}
+
+
+#[derive(Serialize)]
+struct DisplayStats {
+    record_counts: RecordCounts,
+    stats: Vec<StatsEntry>,
+}
+
+#[derive(Serialize)]
+struct StatsEntry {
+    hour_of_day: u8,
+    minimum: f64,
+    median: f64,
+    #[serde(rename = "95th percentile")]
+    p95: f64,
+}
+
+impl DisplayStats {
+    fn new(record_counts: RecordCounts, histograms: DurationHistograms) -> Self {
+        let stats = histograms.0.iter().enumerate()
+            // mapメソッドでhdrhistogram::Histogram値からStatsEntry値を作る
+            .map(|(i, hist)| StatsEntry {
+                hour_of_day: i as u8,
+                minimum: hist.min() as f64 / 60.0,
+                median: hist.value_at_quantile(0.5) as f64 / 60.0,
+                p95: hist.value_at_quantile(0.95) as f64 / 60.0,
+            })
+            .collect();
+        Self {
+            record_counts,
+            stats,
         }
     }
 }
