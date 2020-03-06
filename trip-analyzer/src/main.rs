@@ -47,7 +47,7 @@ impl Default for RecordCounts {
 }
 
 // CSVファイルのパスを引数に取り、データを分析する
-fn analyze(infile: &str) -> Result<String, Box<dyn Error>> {
+fn analyze(infile: &str) -> AppResult<String> {
     // CSVリーダーを作る。失敗したときは「?」後置演算子の働きにより、
     // analyze() 関数からすぐにリターンし、処理の失敗を表すResult::Errを返す
     let mut reader = csv::Reader::from_path(infile)?;
@@ -61,6 +61,13 @@ fn analyze(infile: &str) -> Result<String, Box<dyn Error>> {
         // 最初の10行だけ表示する
         if rec_counts.read <= 10 {
             println!("{:?}", trip);
+        }
+
+        if is_in_midtown(trip.pickup_loc) && is_jfk_airport(trip.dropoff_loc) {
+            let pickup = parse_datetime(&trip.pickup_datetime)?;
+            if is_weekday(pickup) {
+                rec_counts.matched += 1;
+            }
         }
     }
     println!("{:?}", rec_counts);
@@ -88,4 +95,22 @@ fn main() {
             std::process::exit(1);
         }
     }
+}
+
+fn is_in_midtown(loc: LocId) -> bool {
+    // LocId の配列を作る
+    let locations = [90, 100, 161, 162, 163, 164, 186, 230, 234];
+    // 配列に対してバイナリサーチする。
+    // locと同じ値があれば Ok(値のインデックス) が返る
+    locations.binary_search(&loc).is_ok()
+}
+
+// ロケーションIDがJFK国際空港ならtrueを返す
+fn is_jfk_airport(loc: LocId) -> bool {
+    loc == 132
+}
+
+fn is_weekday(datetime: DT) -> bool {
+    // 月:1, 火:2, ... 金:5, 土:6, 日:7
+    datetime.weekday().number_from_monday() <= 5
 }
