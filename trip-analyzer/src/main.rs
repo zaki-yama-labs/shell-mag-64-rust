@@ -2,6 +2,7 @@ use clap::{App, Arg};
 use std::error::Error;
 use serde::{Deserialize, Serialize};
 use chrono::prelude::*;
+use hdrhistogram::Histogram;
 
 // NaiveDateTimeは長いのでDTという別名を定義
 // chrono::NaiveDateTimeはタイムゾーンなしの日時型
@@ -53,7 +54,8 @@ fn analyze(infile: &str) -> AppResult<String> {
     let mut reader = csv::Reader::from_path(infile)?;
 
     let mut rec_counts = RecordCounts::default();
-    for result in reader.deserialize() {
+    let mut hist = DurationHistograms::new()?;
+    for (i, result) in reader.deserialize().enumerate() {
         // どの型にデシリアライズするかをdeserialize()メソッドに
         // 教えるために、trip 変数に型アノテーションをつける
         let trip: Trip = result?;
@@ -67,6 +69,12 @@ fn analyze(infile: &str) -> AppResult<String> {
             let pickup = parse_datetime(&trip.pickup_datetime)?;
             if is_weekday(pickup) {
                 rec_counts.matched += 1;
+                let dropoff = parse_datetime(&trip.dropoff_datetime)?;
+                hist.record_duration(pickup, dropoff)
+                    .unwrap_or_else(|e| {
+                        eprintln!("WARN: {} - {}. Skipped: {:?}", i + 2, e, trip);
+                        rec_counts.skipped += 1;
+                    });
             }
         }
     }
@@ -113,4 +121,49 @@ fn is_jfk_airport(loc: LocId) -> bool {
 fn is_weekday(datetime: DT) -> bool {
     // 月:1, 火:2, ... 金:5, 土:6, 日:7
     datetime.weekday().number_from_monday() <= 5
+}
+
+// DurationHistogramsをタプル構造体として定義する
+// この構造体はHistogramを24個持つことで、1時間刻みの時間帯ごとに
+// 所要時間のヒストグラムデータを追跡する。
+// Vec<T> 型は配列の一種
+struct DurationHistograms(Vec<Histogram<u64>>);
+// 関連関数やメソッドを実装するためにimplブロックを作る
+impl DurationHistograms {
+    // Histograms を初期化する関連関数。記録する上限値を引数に取る
+    fn new() -> AppResult<Self> {
+        let lower_bound = 1;
+        let upper_bound = 3 * 60 *60;
+        let hist = Histogram::new_with_bounds(lower_bound, upper_bound, 3)
+            .map_err(|e| format!("{:?}", e))?;
+        // histの値を24回複製してVec<T>配列に収集する
+        let histograms = std::iter::repeat(hist).take(24).collect();
+        Ok(Self(histograms))
+    }
+
+    fn record_duration(&mut self, pickup: DT, dropoff: DT) -> AppResult<()> {
+        // 所要時間を秒で求める。結果は i64 型になるが as u64 で u64 型に変換
+        let duration = (dropoff - pickup).num_seconds() as u64;
+
+        // 20分未満はエラーにする
+        if duration < 20 * 60 {
+            Err(format!("duration secs {} is too short.", duration).into())
+        } else {
+            let hour = pickup.hour() as usize;
+            // タプル構造体の最初のフィールドの名前は0になるので、
+            // self.0 でVec<Histogram>にアクセスできる。さらに個々の
+            // Histogramにアクセスするには [インデックス] で
+            // その要素のインデックスを指定する
+            self.0[hour]
+                // Histogram の record() メソッドで所要時間を記録する
+                .record(duration)
+                // このメソッドはHistogramの作成時に設定した上限(upper_bound)
+                // を超えているとErr(RecordError)を返すので、map_err() で
+                // Err(String)に変換する
+                .map_err(|e| {
+                    format!("duration secs {} is too long. {:?}", duration, e)
+                        .into()
+                })
+        }
+    }
 }
